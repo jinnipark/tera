@@ -1,5 +1,5 @@
 PROJECT = tera
-DEPS = recon
+DEPS = cowboy gun recon
 dep_recon = git https://github.com/ferd/recon.git master
 
 release:: deps apps

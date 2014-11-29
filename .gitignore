@@ -1,7 +1,9 @@
 *.o
 *.so
+*.app
 *.beam
 *.dump
 _*
 deps
+ebin
 log

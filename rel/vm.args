@@ -1,3 +1,10 @@
++K true
++P 1000000
++Q 1000000
++W w
++sbwt none
++swt very_high
++spp true
 -sname tera
 -setcookie tera
 -heart

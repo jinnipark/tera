@@ -5,7 +5,7 @@
 -export([stop/1]).
 
 start(_Type, _Args) ->
-	enoc_sup:start_link().
+  enoc_sup:start_link().
 
 stop(_State) ->
-	ok.
+  ok.
