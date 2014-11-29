@@ -1,0 +1,7 @@
+*.o
+*.so
+*.beam
+*.dump
+_*
+deps
+log
