@@ -1,10 +1,11 @@
 PROJECT = tera
+
 APPS = $(wildcard apps/*)
 LIBS = $(wildcard libs/*)
 DEPS += recon
 dep_recon = git https://github.com/ferd/recon.git master
 
-.PHONY: all apps libs deps clean tests
+.PHONY: apps libs deps test clean
 
 ALL_APPS_DIR = $(addprefix $(CURDIR)/,$(APPS))
 ALL_LIBS_DIR = $(addprefix $(CURDIR)/,$(LIBS))
@@ -19,6 +20,27 @@ deps::
 	$(gen_verbose) $(foreach lib,$(ALL_LIBS_DIR),$(call make_2,$(lib),deps))
 	$(gen_verbose) $(foreach app,$(ALL_APPS_DIR),$(call make_2,$(app),deps))
 
+test:: test-deps test-libs test-apps
+test:: ERLC_OPTS = $(TEST_ERLC_OPTS)
+test:: clean deps libs apps build-ct-suites
+	@if [ -d "test" ] && [ -n "$(CT_SUITES)" ]; \
+	then \
+		mkdir -p logs/ ; \
+		$(CT_RUN) -suite $(addsuffix _SUITE,$(CT_SUITES)) $(CT_OPTS) ; \
+	fi
+
+skip_deps ?= true
+test-deps::
+ifneq ($(skip_deps),true)
+	$(gen_verbose) $(foreach dep,$(addprefix $(CURDIR)/,$(wildcard deps/*)),$(call make_2,$(dep),tests))
+endif
+
+test-libs::
+	$(gen_verbose) $(foreach lib,$(ALL_LIBS_DIR),$(call make_2,$(lib),tests))
+
+test-apps::
+	$(gen_verbose) $(foreach app,$(ALL_APPS_DIR),$(call make_2,$(app),tests))
+
 clean:: clean-apps clean-libs clean-deps clean-test
 
 clean-apps::
@@ -30,29 +52,11 @@ clean-libs::
 clean-deps::
 	$(gen_verbose) $(foreach dep,$(addprefix $(CURDIR)/,$(wildcard deps/*)),$(call make_2,$(dep),clean))
 
-test:: test-deps test-libs test-apps
-test:: ERLC_OPTS = $(TEST_ERLC_OPTS)
-test:: clean deps libs apps build-ct-suites
-	@if [ -d "test" ] && [ -n "$(CT_SUITES)" ]; \
-	then \
-		mkdir -p logs/ ; \
-		$(CT_RUN) -suite $(addsuffix _SUITE,$(CT_SUITES)) $(CT_OPTS) ; \
-	fi
-
-test-deps::
-ifndef skip_deps
-	$(gen_verbose) $(foreach dep,$(addprefix $(CURDIR)/,$(wildcard deps/*)),$(call make_2,$(dep),tests))
-endif
-
-test-libs::
-	$(gen_verbose) $(foreach lib,$(ALL_LIBS_DIR),$(call make_2,$(lib),tests))
-
-test-apps::
-	$(gen_verbose) $(foreach app,$(ALL_APPS_DIR),$(call make_2,$(app),tests))
-
 clean-test::
 	$(gen_verbose) rm -f test/*.beam
 
+## Recursively make a subdirectory.
+## Use the subdirectory's makefile or use default erlang.mk to make.
 define make_2
 	if [ -f "$(1)/makefile" ] || [ -f "$(1)/Makefile" ]; then \
 		$(MAKE) -S -w -C $(1) $(2); \
