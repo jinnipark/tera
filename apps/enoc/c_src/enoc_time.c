@@ -24,4 +24,3 @@ static ErlNifFunc nif_funcs[] = {
 };
 
 ERL_NIF_INIT(enoc_time, nif_funcs, NULL, NULL, NULL, NULL)
-

@@ -1,0 +1,12 @@
+{application, poa, [
+	{description, "Plain old application"},
+	{vsn, "0.0.1"},
+	{modules, []},
+	{registered, []},
+	{applications, [
+		kernel,
+		stdlib
+	]},
+	{mod, {poa_app, []}},
+	{env, []}
+]}.

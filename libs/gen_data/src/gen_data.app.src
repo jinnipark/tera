@@ -1,0 +1,10 @@
+{application, gen_data, [
+	{description, "Generic data structure"},
+	{vsn, "0.1.0"},
+	{modules, []},
+	{registered, []},
+	{applications, [
+		kernel,
+		stdlib
+	]}
+]}.

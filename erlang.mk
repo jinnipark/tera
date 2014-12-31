@@ -416,6 +416,56 @@ tpl_gen_server = "-module($(n))." \
 	"" \
 	"code_change(_OldVsn, State, _Extra) ->" \
 	"	{ok, State}."
+tpl_gen_fsm = "-module($(n))." \
+	"-behaviour(gen_fsm)." \
+	"" \
+	"%% API." \
+	"-export([start_link/0])." \
+	"" \
+	"%% gen_fsm." \
+	"-export([init/1])." \
+	"-export([state_name/2])." \
+	"-export([handle_event/3])." \
+	"-export([state_name/3])." \
+	"-export([handle_sync_event/4])." \
+	"-export([handle_info/3])." \
+	"-export([terminate/3])." \
+	"-export([code_change/4])." \
+	"" \
+	"-record(state, {" \
+	"})." \
+	"" \
+	"%% API." \
+	"" \
+	"-spec start_link() -> {ok, pid()}." \
+	"start_link() ->" \
+	"	gen_fsm:start_link(?MODULE, [], [])." \
+	"" \
+	"%% gen_fsm." \
+	"" \
+	"init([]) ->" \
+	"	{ok, state_name, \#state{}}." \
+	"" \
+	"state_name(_Event, StateData) ->" \
+	"	{next_state, state_name, StateData}." \
+	"" \
+	"handle_event(_Event, StateName, StateData) ->" \
+	"	{next_state, StateName, StateData}." \
+	"" \
+	"state_name(_Event, _From, StateData) ->" \
+	"	{reply, ignored, state_name, StateData}." \
+	"" \
+	"handle_sync_event(_Event, _From, StateName, StateData) ->" \
+	"	{reply, ignored, StateName, StateData}." \
+	"" \
+	"handle_info(_Info, StateName, StateData) ->" \
+	"	{next_state, StateName, StateData}." \
+	"" \
+	"terminate(_Reason, _StateName, _StateData) ->" \
+	"	ok." \
+	"" \
+	"code_change(_OldVsn, StateName, StateData, _Extra) ->" \
+	"	{ok, StateName, StateData}."
 tpl_cowboy_http = "-module($(n))." \
 	"-behaviour(cowboy_http_handler)." \
 	"" \
@@ -671,7 +721,7 @@ $(C_SRC_ENV):
 clean:: clean-c_src
 
 clean-c_src:
-	$(gen_verbose) rm -f $(C_SRC_OUTPUT) $(OBJECTS)
+	$(gen_verbose) rm -f $(C_SRC_OUTPUT) $(OBJECTS) $(C_SRC_ENV)
 
 distclean:: distclean-c_src-env
 
@@ -733,22 +783,20 @@ build-ct-suites: build-ct-deps
 
 tests-ct: ERLC_OPTS = $(TEST_ERLC_OPTS)
 tests-ct: clean deps app build-ct-suites
-	@if [ -d "test" ] ; \
+	@if [ -d "test" ] && [ -n "$(CT_SUITES)" ]; \
 	then \
 		mkdir -p logs/ ; \
 		$(CT_RUN) -suite $(addsuffix _SUITE,$(CT_SUITES)) $(CT_OPTS) ; \
 	fi
-	$(gen_verbose) rm -f test/*.beam
 
 define ct_suite_target
 ct-$(1): ERLC_OPTS = $(TEST_ERLC_OPTS)
 ct-$(1): clean deps app build-ct-suites
-	@if [ -d "test" ] ; \
+	@if [ -d "test" ] && [ -n "$(1)" ]; \
 	then \
 		mkdir -p logs/ ; \
 		$(CT_RUN) -suite $(addsuffix _SUITE,$(1)) $(CT_OPTS) ; \
 	fi
-	$(gen_verbose) rm -f test/*.beam
 endef
 
 $(foreach test,$(CT_SUITES),$(eval $(call ct_suite_target,$(test))))
@@ -954,6 +1002,78 @@ escript:: distclean-escript deps app
 distclean-escript:
 	$(gen_verbose) rm -f $(ESCRIPT_NAME)
 
+# Copyright (c) 2014, Enrique Fernandez <enrique.fernandez@erlang-solutions.com>
+# This file is contributed to erlang.mk and subject to the terms of the ISC License.
+
+.PHONY: help-eunit build-eunit eunit distclean-eunit
+
+# Configuration
+
+EUNIT_ERLC_OPTS ?= +debug_info +warn_export_vars +warn_shadow_vars +warn_obsolete_guard -DTEST=1 -DEXTRA=1
+
+EUNIT_DIR ?=
+EUNIT_DIRS = $(sort $(EUNIT_DIR) ebin)
+
+ifeq ($(strip $(EUNIT_DIR)),)
+TAGGED_EUNIT_TESTS = {dir,"ebin"}
+else
+# All modules in EUNIT_DIR
+EUNIT_DIR_MODS = $(notdir $(basename $(shell find $(EUNIT_DIR) -type f -name *.beam)))
+# All modules in 'ebin'
+EUNIT_EBIN_MODS = $(notdir $(basename $(shell find ebin -type f -name *.beam)))
+# Only those modules in EUNIT_DIR with no matching module in 'ebin'.
+# This is done to avoid some tests being executed twice.
+EUNIT_MODS = $(filter-out $(patsubst %,%_tests,$(EUNIT_EBIN_MODS)),$(EUNIT_DIR_MODS))
+TAGGED_EUNIT_TESTS = {dir,"ebin"} $(foreach mod,$(EUNIT_MODS),$(shell echo $(mod) | sed -e 's/\(.*\)/{module,\1}/g'))
+endif
+
+EUNIT_OPTS ?= verbose
+
+# Utility functions
+
+define str-join
+	$(shell echo '$(strip $(1))' | sed -e "s/ /,/g")
+endef
+
+# Core targets.
+
+help:: help-eunit
+
+tests:: eunit
+
+clean:: clean-eunit
+
+# Plugin-specific targets.
+
+EUNIT_RUN = erl \
+	-no_auto_compile \
+	-noshell \
+	-pa $(realpath $(EUNIT_DIR)) $(DEPS_DIR)/*/ebin \
+	-pz $(realpath ebin) \
+	-eval 'case eunit:test([$(call str-join,$(TAGGED_EUNIT_TESTS))], [$(EUNIT_OPTS)]) of ok -> erlang:halt(0); error -> erlang:halt(1) end.'
+
+help-eunit:
+	@printf "%s\n" "" \
+		"EUnit targets:" \
+		"  eunit       Run all the EUnit tests for this project"
+
+ifeq ($(strip $(EUNIT_DIR)),)
+build-eunit:
+else ifeq ($(strip $(EUNIT_DIR)),ebin)
+build-eunit:
+else
+build-eunit:
+	$(gen_verbose) erlc -v $(EUNIT_ERLC_OPTS) -I include/ -o $(EUNIT_DIR) \
+		$(wildcard $(EUNIT_DIR)/*.erl $(EUNIT_DIR)/*/*.erl) -pa ebin/
+endif
+
+eunit: ERLC_OPTS = $(EUNIT_ERLC_OPTS)
+eunit: clean deps app build-eunit
+	$(gen_verbose) $(EUNIT_RUN)
+
+clean-eunit:
+	$(gen_verbose) $(foreach dir,$(EUNIT_DIRS),rm -rf $(dir)/*.beam)
+
 # Copyright (c) 2013-2014, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
@@ -1010,7 +1130,7 @@ distclean-relx:
 
 # Configuration.
 
-SHELL_PATH ?= -pa ../$(PROJECT)/ebin $(DEPS_DIR)/*/ebin
+SHELL_PATH ?= -pa $(CURDIR)/ebin $(DEPS_DIR)/*/ebin
 SHELL_OPTS ?=
 
 ALL_SHELL_DEPS_DIRS = $(addprefix $(DEPS_DIR)/,$(SHELL_DEPS))
